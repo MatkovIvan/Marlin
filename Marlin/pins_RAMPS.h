@@ -277,20 +277,13 @@
   #define FILWIDTH_PIN      5   // Analog Input on AUX2
 #endif
 
-// define digital pin 4 for the filament runout sensor. Use the RAMPS 1.4 digital input 4 on the servos connector修改断料检测连接位置
+// define digital pin 4 for the filament runout sensor. Use the RAMPS 1.4 digital input 4 on the servos connector
 
-  #define FIL_RUNOUT_PIN    2     
+#define FIL_RUNOUT_PIN      2
 
-
-#if EXTRUDERS>1
-#define FIL_RUNOUT2_PIN     19
+#if EXTRUDERS > 1
+  #define FIL_RUNOUT2_PIN  19
 #endif
-// X max
-
-
-#define PS_ON_PIN          12
-
-
 
 #ifndef PS_ON_PIN
   #define PS_ON_PIN        12
