@@ -59,6 +59,15 @@ typedef struct {
     uint8_t active_extruder;
   #endif
 
+  #if DISABLED(NO_VOLUMETRICS)
+    bool volumetric_enabled;
+    #if EXTRUDERS > 1
+      float filament_size[EXTRUDERS];
+    #else
+      float filament_size;
+    #endif
+  #endif
+
   #if HOTENDS
     int16_t target_temperature[HOTENDS];
   #endif
@@ -169,7 +178,7 @@ class PrintJobRecovery {
   #if ENABLED(DEBUG_POWER_LOSS_RECOVERY)
     static void debug(PGM_P const prefix);
   #else
-    static inline void debug(PGM_P const prefix) { UNUSED(prefix); }
+    static inline void debug(PGM_P const) {}
   #endif
 
   private:

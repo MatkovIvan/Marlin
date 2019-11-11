@@ -43,7 +43,8 @@
   #define NOT_A_PIN 0 // For PINS_DEBUGGING
 #endif
 
-#define HAS_CLASSIC_JERK (IS_KINEMATIC || DISABLED(JUNCTION_DEVIATION))
+#define HAS_CLASSIC_JERK (ENABLED(CLASSIC_JERK) || IS_KINEMATIC)
+#define HAS_CLASSIC_E_JERK (HAS_CLASSIC_JERK && DISABLED(LIN_ADVANCE))
 
 /**
  * Axis lengths and center
@@ -220,11 +221,6 @@
   #ifndef Z_SAFE_HOMING_Y_POINT
     #define Z_SAFE_HOMING_Y_POINT _SAFE_POINT(Y)
   #endif
-  #define X_TILT_FULCRUM Z_SAFE_HOMING_X_POINT
-  #define Y_TILT_FULCRUM Z_SAFE_HOMING_Y_POINT
-#else
-  #define X_TILT_FULCRUM X_HOME_POS
-  #define Y_TILT_FULCRUM Y_HOME_POS
 #endif
 
 /**
@@ -336,8 +332,6 @@
     #define PSU_NAME "Generic"    // No control
   #endif
 #endif
-
-#define HAS_POWER_SWITCH (ENABLED(PSU_CONTROL) && PIN_EXISTS(PS_ON))
 
 /**
  * Temp Sensor defines
@@ -584,9 +578,13 @@
     #define MINIMUM_STEPPER_PULSE 2
   #elif HAS_DRIVER(A4988) || HAS_DRIVER(A5984)
     #define MINIMUM_STEPPER_PULSE 1
-  #elif HAS_DRIVER(LV8729)
-    #define MINIMUM_STEPPER_PULSE 0
   #elif TRINAMICS
+    #if ENABLED(LIN_ADVANCE) && (HAS_TMC_STANDALONE_E_DRIVER || (HAS_TMC_E_DRIVER && DISABLED(SQUARE_WAVE_STEPPING)))
+      #define MINIMUM_STEPPER_PULSE 1
+    #else
+      #define MINIMUM_STEPPER_PULSE 0
+    #endif
+  #elif HAS_DRIVER(LV8729)
     #define MINIMUM_STEPPER_PULSE 0
   #else
     #define MINIMUM_STEPPER_PULSE 2
@@ -829,12 +827,12 @@
 // Is an endstop plug used for the Z2 endstop or the bed probe?
 #define IS_Z2_OR_PROBE(A,M) ( \
      (Z_MULTI_ENDSTOPS && Z2_USE_ENDSTOP == _##A##M##_) \
-  || (USES_Z_MIN_PROBE_ENDSTOP && Z_MIN_PROBE_PIN == A##_##M##_PIN ) )
+  || (HAS_CUSTOM_PROBE_PIN && Z_MIN_PROBE_PIN == A##_##M##_PIN ) )
 
 // Is an endstop plug used for the Z3 endstop or the bed probe?
 #define IS_Z3_OR_PROBE(A,M) ( \
      (ENABLED(Z_TRIPLE_ENDSTOPS) && Z3_USE_ENDSTOP == _##A##M##_) \
-  || (USES_Z_MIN_PROBE_ENDSTOP && Z_MIN_PROBE_PIN == A##_##M##_PIN ) )
+  || (HAS_CUSTOM_PROBE_PIN && Z_MIN_PROBE_PIN == A##_##M##_PIN ) )
 
 /**
  * Set ENDSTOPPULLUPS for active endstop switches
@@ -977,7 +975,10 @@
   #define X_SENSORLESS  (AXIS_HAS_STALLGUARD(X)  && defined(X_STALL_SENSITIVITY))
   #define X2_SENSORLESS (AXIS_HAS_STALLGUARD(X2) && defined(X2_STALL_SENSITIVITY))
   #define Y_SENSORLESS  (AXIS_HAS_STALLGUARD(Y)  && defined(Y_STALL_SENSITIVITY))
+  #define Y2_SENSORLESS (AXIS_HAS_STALLGUARD(Y2) && defined(Y2_STALL_SENSITIVITY))
   #define Z_SENSORLESS  (AXIS_HAS_STALLGUARD(Z)  && defined(Z_STALL_SENSITIVITY))
+  #define Z2_SENSORLESS (AXIS_HAS_STALLGUARD(Z2) && defined(Z2_STALL_SENSITIVITY))
+  #define Z3_SENSORLESS (AXIS_HAS_STALLGUARD(Z3) && defined(Z3_STALL_SENSITIVITY))
   #if ENABLED(SPI_ENDSTOPS)
     #define X_SPI_SENSORLESS X_SENSORLESS
     #define Y_SPI_SENSORLESS Y_SENSORLESS
@@ -1006,7 +1007,7 @@
 #define HAS_Z2_MAX (PIN_EXISTS(Z2_MAX))
 #define HAS_Z3_MIN (PIN_EXISTS(Z3_MIN))
 #define HAS_Z3_MAX (PIN_EXISTS(Z3_MAX))
-#define HAS_Z_MIN_PROBE_PIN (USES_Z_MIN_PROBE_ENDSTOP && PIN_EXISTS(Z_MIN_PROBE))
+#define HAS_Z_MIN_PROBE_PIN (HAS_CUSTOM_PROBE_PIN && PIN_EXISTS(Z_MIN_PROBE))
 #define HAS_CALIBRATION_PIN (PIN_EXISTS(CALIBRATION))
 
 // ADC Temp Sensors (Thermistor or Thermocouple with amplifier ADC interface)
@@ -1020,7 +1021,7 @@
 #define HAS_TEMP_ADC_BED HAS_ADC_TEST(BED)
 #define HAS_TEMP_ADC_CHAMBER HAS_ADC_TEST(CHAMBER)
 
-#define HAS_TEMP_HOTEND (HAS_TEMP_ADC_0 || ENABLED(HEATER_0_USES_MAX6675))
+#define HAS_TEMP_HOTEND (HOTENDS > 0 && (HAS_TEMP_ADC_0 || ENABLED(HEATER_0_USES_MAX6675)))
 #define HAS_TEMP_BED HAS_TEMP_ADC_BED
 #define HAS_TEMP_CHAMBER HAS_TEMP_ADC_CHAMBER
 #define HAS_HEATED_CHAMBER (HAS_TEMP_CHAMBER && PIN_EXISTS(HEATER_CHAMBER))
@@ -1064,7 +1065,7 @@
 #define WATCH_CHAMBER (HAS_HEATED_CHAMBER && ENABLED(THERMAL_PROTECTION_CHAMBER) && WATCH_CHAMBER_TEMP_PERIOD > 0)
 
 // Auto fans
-#define HAS_AUTO_FAN_0 (PIN_EXISTS(E0_AUTO_FAN))
+#define HAS_AUTO_FAN_0 (HOTENDS > 0 && PIN_EXISTS(E0_AUTO_FAN))
 #define HAS_AUTO_FAN_1 (HOTENDS > 1 && PIN_EXISTS(E1_AUTO_FAN))
 #define HAS_AUTO_FAN_2 (HOTENDS > 2 && PIN_EXISTS(E2_AUTO_FAN))
 #define HAS_AUTO_FAN_3 (HOTENDS > 3 && PIN_EXISTS(E3_AUTO_FAN))
@@ -1073,14 +1074,9 @@
 #define HAS_AUTO_CHAMBER_FAN (HAS_TEMP_CHAMBER && PIN_EXISTS(CHAMBER_AUTO_FAN))
 
 #define HAS_AUTO_FAN (HAS_AUTO_FAN_0 || HAS_AUTO_FAN_1 || HAS_AUTO_FAN_2 || HAS_AUTO_FAN_3 || HAS_AUTO_FAN_4 || HAS_AUTO_FAN_5 || HAS_AUTO_CHAMBER_FAN)
+#define _FANOVERLAP(A,B) (A##_AUTO_FAN_PIN == E##B##_AUTO_FAN_PIN)
 #if HAS_AUTO_FAN
-  #define AUTO_CHAMBER_IS_0 (CHAMBER_AUTO_FAN_PIN == E0_AUTO_FAN_PIN)
-  #define AUTO_CHAMBER_IS_1 (CHAMBER_AUTO_FAN_PIN == E1_AUTO_FAN_PIN)
-  #define AUTO_CHAMBER_IS_2 (CHAMBER_AUTO_FAN_PIN == E2_AUTO_FAN_PIN)
-  #define AUTO_CHAMBER_IS_3 (CHAMBER_AUTO_FAN_PIN == E3_AUTO_FAN_PIN)
-  #define AUTO_CHAMBER_IS_4 (CHAMBER_AUTO_FAN_PIN == E4_AUTO_FAN_PIN)
-  #define AUTO_CHAMBER_IS_5 (CHAMBER_AUTO_FAN_PIN == E5_AUTO_FAN_PIN)
-  #define AUTO_CHAMBER_IS_E (AUTO_CHAMBER_IS_0 || AUTO_CHAMBER_IS_1 || AUTO_CHAMBER_IS_2 || AUTO_CHAMBER_IS_3 || AUTO_CHAMBER_IS_4 || AUTO_CHAMBER_IS_5)
+  #define AUTO_CHAMBER_IS_E (_FANOVERLAP(CHAMBER,0) || _FANOVERLAP(CHAMBER,1) || _FANOVERLAP(CHAMBER,2) || _FANOVERLAP(CHAMBER,3) || _FANOVERLAP(CHAMBER,4) || _FANOVERLAP(CHAMBER,5))
 #endif
 
 #if !HAS_AUTO_CHAMBER_FAN || AUTO_CHAMBER_IS_E
@@ -1310,8 +1306,15 @@
 /**
  * MIN/MAX fan PWM scaling
  */
+#ifndef FAN_OFF_PWM
+  #define FAN_OFF_PWM 0
+#endif
 #ifndef FAN_MIN_PWM
-  #define FAN_MIN_PWM 0
+  #if FAN_OFF_PWM > 0
+    #define FAN_MIN_PWM (FAN_OFF_PWM + 1)
+  #else
+    #define FAN_MIN_PWM 0
+  #endif
 #endif
 #ifndef FAN_MAX_PWM
   #define FAN_MAX_PWM 255
@@ -1322,6 +1325,8 @@
   #error "FAN_MAX_PWM must be a value from 0 to 255."
 #elif FAN_MIN_PWM > FAN_MAX_PWM
   #error "FAN_MIN_PWM must be less than or equal to FAN_MAX_PWM."
+#elif FAN_OFF_PWM > FAN_MIN_PWM
+  #error "FAN_OFF_PWM must be less than or equal to FAN_MIN_PWM."
 #endif
 
 /**
@@ -1329,6 +1334,17 @@
  */
 #if ENABLED(FAST_PWM_FAN) && !defined(FAST_PWM_FAN_FREQUENCY)
   #define FAST_PWM_FAN_FREQUENCY ((F_CPU) / (2 * 255 * 1)) // Fan frequency default
+#endif
+
+/**
+ * MIN/MAX case light PWM scaling
+ */
+#if HAS_CASE_LIGHT
+  #ifndef CASE_LIGHT_MAX_PWM
+    #define CASE_LIGHT_MAX_PWM 255
+  #elif !WITHIN(CASE_LIGHT_MAX_PWM, 1, 255)
+    #error "CASE_LIGHT_MAX_PWM must be a value from 1 to 255."
+  #endif
 #endif
 
 /**
@@ -1556,8 +1572,8 @@
 
 #endif // MESH_BED_LEVELING || AUTO_BED_LEVELING_UBL
 
-#if ALL(PROBE_PT_1_X, PROBE_PT_2_X, PROBE_PT_3_X, PROBE_PT_1_Y, PROBE_PT_2_Y, PROBE_PT_3_Y)
-  #define HAS_FIXED_3POINT;
+#if (defined(PROBE_PT_1_X) && defined(PROBE_PT_2_X) && defined(PROBE_PT_3_X) && defined(PROBE_PT_1_Y) && defined(PROBE_PT_2_Y) && defined(PROBE_PT_3_Y))
+  #define HAS_FIXED_3POINT
 #endif
 
 #if EITHER(AUTO_BED_LEVELING_UBL, AUTO_BED_LEVELING_3POINT) && IS_KINEMATIC
@@ -1763,23 +1779,25 @@
   #define Z_STEPPER_COUNT 1
 #endif
 
-// Get LCD character width/height, which may be overridden by pins, configs, etc.
-#ifndef LCD_WIDTH
-  #if HAS_GRAPHICAL_LCD
-    #define LCD_WIDTH 21
-  #elif ENABLED(ULTIPANEL)
-    #define LCD_WIDTH 20
-  #elif HAS_SPI_LCD
-    #define LCD_WIDTH 16
+#if HAS_SPI_LCD
+  // Get LCD character width/height, which may be overridden by pins, configs, etc.
+  #ifndef LCD_WIDTH
+    #if HAS_GRAPHICAL_LCD
+      #define LCD_WIDTH 21
+    #elif ENABLED(ULTIPANEL)
+      #define LCD_WIDTH 20
+    #else
+      #define LCD_WIDTH 16
+    #endif
   #endif
-#endif
-#ifndef LCD_HEIGHT
-  #if HAS_GRAPHICAL_LCD
-    #define LCD_HEIGHT 5
-  #elif ENABLED(ULTIPANEL)
-    #define LCD_HEIGHT 4
-  #elif HAS_SPI_LCD
-    #define LCD_HEIGHT 2
+  #ifndef LCD_HEIGHT
+    #if HAS_GRAPHICAL_LCD
+      #define LCD_HEIGHT 5
+    #elif ENABLED(ULTIPANEL)
+      #define LCD_HEIGHT 4
+    #else
+      #define LCD_HEIGHT 2
+    #endif
   #endif
 #endif
 
@@ -1800,4 +1818,11 @@
 
 #if !NUM_SERIAL
   #undef BAUD_RATE_GCODE
+#endif
+
+#if ENABLED(Z_STEPPER_ALIGN_KNOWN_STEPPER_POSITIONS)
+  #undef Z_STEPPER_ALIGN_AMP
+#endif
+#ifndef Z_STEPPER_ALIGN_AMP
+  #define Z_STEPPER_ALIGN_AMP 1.0
 #endif
